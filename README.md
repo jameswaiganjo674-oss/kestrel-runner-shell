@@ -22,3 +22,8 @@ This repository is not an authority for MAGNAN source, identity, policy, memory,
 ## Next security gates
 
 Any future proposal to build private source here requires a separate review and approval covering source provenance, credential isolation, dependency pinning, build-script egress, artifact confidentiality, retention, and verifiable provenance.
+
+
+## Android toolchain preflight
+
+A second manual workflow, `.github/workflows/android-toolchain-preflight.yml`, builds a disposable generated Android sample. It validates runner Java, Android SDK, Gradle and Android Gradle Plugin compatibility without checking out or importing MAGNAN source. It produces no uploaded artifact. Passing this test proves only that the public runner can build a clean-room sample Android app; it does not validate MAGNAN code.
