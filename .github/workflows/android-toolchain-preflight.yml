@@ -1,0 +1,135 @@
+name: KESTREL Android Toolchain Preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kestrel-android-toolchain-preflight
+  cancel-in-progress: false
+
+jobs:
+  clean-room-android-build:
+    name: Build a disposable sample Android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Install pinned Java toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk curl unzip
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> "$GITHUB_PATH"
+
+      - name: Locate Android SDK and install required platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android sdkmanager not found under $SDK_ROOT/cmdline-tools"
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-35" "build-tools;35.0.0"
+          test -d "$SDK_ROOT/platforms/android-35"
+          test -x "$SDK_ROOT/build-tools/35.0.0/aapt"
+
+      - name: Download and verify Gradle 8.11.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --location --silent --show-error -o gradle-8.11.1-bin.zip https://services.gradle.org/distributions/gradle-8.11.1-bin.zip
+          curl --fail --location --silent --show-error -o gradle-8.11.1-bin.zip.sha256 https://services.gradle.org/distributions/gradle-8.11.1-bin.zip.sha256
+          sha256sum -c gradle-8.11.1-bin.zip.sha256
+          unzip -q gradle-8.11.1-bin.zip
+          echo "$RUNNER_TEMP/gradle-8.11.1/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/gradle-8.11.1/bin/gradle" --version
+
+      - name: Generate isolated sample Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT="$RUNNER_TEMP/kestrel-android-sample"
+          mkdir -p "$PROJECT/app/src/main/java/org/kestrel/sample"
+          cat > "$PROJECT/settings.gradle" <<'EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = 'KestrelAndroidPreflight'
+          include ':app'
+          EOF
+          cat > "$PROJECT/build.gradle" <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.9.2' apply false
+          }
+          EOF
+          cat > "$PROJECT/gradle.properties" <<'EOF'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          EOF
+          cat > "$PROJECT/app/build.gradle" <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'org.kestrel.sample'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'org.kestrel.sample'
+                  minSdk 23
+                  targetSdk 28
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+          cat > "$PROJECT/app/src/main/AndroidManifest.xml" <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:label="KESTREL Preflight">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > "$PROJECT/app/src/main/java/org/kestrel/sample/MainActivity.java" <<'EOF'
+          package org.kestrel.sample;
+          public final class MainActivity extends android.app.Activity {
+              @Override public void onCreate(android.os.Bundle state) {
+                  super.onCreate(state);
+                  android.widget.TextView label = new android.widget.TextView(this);
+                  label.setText("KESTREL Android toolchain preflight");
+                  setContentView(label);
+              }
+          }
+          EOF
+          echo "$PROJECT" > "$RUNNER_TEMP/kestrel-project-path"
+
+      - name: Compile disposable sample APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT="$(cat "$RUNNER_TEMP/kestrel-project-path")"
+          cd "$PROJECT"
+          gradle --no-daemon --stacktrace assembleDebug
+          APK="$PROJECT/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          sha256sum "$APK"
+          echo "CLEAN_ROOM_ANDROID_BUILD=PASS"
+          echo "No MAGNAN source, credentials, or project artifacts were used."
