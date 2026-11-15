@@ -69,3 +69,8 @@ If build code can access a source-fetch credential or untrusted dependencies can
 ## Governance
 
 The public shell is disposable infrastructure only. MAGNAN Core remains the private, authoritative repository. No source mirroring, bidirectional synchronisation, release authority, or trust delegation is permitted.
+
+
+## Clean-room Android toolchain preflight
+
+A separate manually dispatched workflow may compile only a generated disposable sample Android application. It must not checkout, fetch, mount, receive, or otherwise access MAGNAN source or credentials. It uploads no artifacts. The test may use public package repositories to install standard toolchains and dependencies; this is acceptable only because the generated sample contains no private data. A pass is evidence of runner/toolchain capability only, not MAGNAN compilation or private-source safety.
