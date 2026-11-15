@@ -55,7 +55,7 @@ jobs:
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories { google(); mavenCentral() }
           }
-          rootProject.name = 'MagnanBuildCompatibilityPreflight'
+          rootProject.name = 'MAGNAN-Android-Vault'
           include ':app', ':core'
           EOF
           cat > "$P/build.gradle" <<'EOF'
@@ -66,7 +66,7 @@ jobs:
           }
           EOF
           cat > "$P/gradle.properties" <<'EOF'
-          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          org.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8
           android.useAndroidX=true
           org.gradle.parallel=false
           EOF
@@ -78,8 +78,9 @@ jobs:
               iosSimulatorArm64()
               js(IR) { browser() }
               sourceSets {
-                  commonMain { dependencies {} }
-                  commonTest { dependencies { implementation kotlin('test') } }
+                  commonTest.dependencies {
+                      implementation kotlin('test')
+                  }
               }
           }
           EOF
@@ -106,7 +107,19 @@ jobs:
           android {
               namespace 'org.kestrel.compat'
               compileSdk 35
-              defaultConfig { applicationId 'org.kestrel.compat'; minSdk 28; targetSdk 35 }
+              defaultConfig {
+                  applicationId 'org.kestrel.compat'
+                  minSdk 28
+                  targetSdk 35
+                  versionCode 3
+                  versionName '0.3.0'
+              }
+              buildTypes {
+                  debug {
+                      applicationIdSuffix '.m2process'
+                      versionNameSuffix '-m2process'
+                  }
+              }
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
