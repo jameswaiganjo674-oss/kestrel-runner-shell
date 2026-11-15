@@ -1,57 +1,67 @@
 # KESTREL Public Runner Shell — Security Review
 
-**Revision:** 1.0 — 15 November 2026  
+**Revision:** 1.1 — 15 November 2026  
 **Repository:** `jameswaiganjo674-oss/kestrel-runner-shell`  
 **Classification:** Public, deliberately minimal workflow infrastructure  
-**Status:** Initial boundary reviewed; hosted-runner execution not yet verified.
+**Status:** Initial boundary reviewed; public-lab audit CI passed. Private-source execution remains NO-GO.
 
 ## Disclosure inventory
 
 Permitted contents:
-- This README.
-- One manually dispatched generic runner smoke workflow.
-- No MAGNAN project source or project-specific implementation details.
+- Public runner and Android toolchain smoke workflows.
+- Generated, disposable compatibility fixtures containing no private project source.
+- Generic audit scripts and documentation.
 
 Prohibited contents:
-- MAGNAN Core source, Git history, branch names, diffs, internal URLs, architectural records, owner records, personal information, prompts, memory, vault assets, credentials, API tokens, private keys, signing assets, recovery kits, or private build artifacts.
+- MAGNAN Core source, Git history, private branch names, diffs, internal URLs, private architecture records, owner records, personal information, prompts, memory, vault assets, credentials, API tokens, private keys, signing assets, recovery kits, or private build artifacts.
 
 ## Workflow controls
 
-- Trigger: `workflow_dispatch` only.
-- Runner: `ubuntu-latest`.
-- Job timeout: 3 minutes.
+- Public-lab audit trigger: pull request, push to main, or manual dispatch.
+- Audit runner timeout: 5 minutes.
 - Permissions: `contents: read` only.
-- No checkout action.
-- No third-party actions.
-- No repository or environment secrets.
-- No external network calls.
-- No artifact upload.
-- No deployment or publication step.
-- No pull-request, fork, push, issue-comment, or schedule trigger.
+- Checkout action pinned to a full commit SHA.
+- Checkout uses `persist-credentials: false`.
+- No repository/environment secrets are referenced.
+- No artifact upload, deployment, or release step.
+- Other runner/toolchain workflows remain manually dispatched.
+- No private repository checkout or source import.
+
+## Automated guardrails
+
+The Node.js audit checks:
+1. Tracked files against an explicit allowlist.
+2. Obvious GitHub token, Cloudflare token-assignment, private MAGNAN repository URL, and Actions secret-reference patterns.
+3. Workflow read-only permissions and job timeouts.
+4. Full-SHA pinning for any third-party Actions used.
+5. Absence of artifact publication/deployment markers.
+6. Selected Android/Kotlin dependency versions and Gradle checksum verification in the generated compatibility fixture.
+
+The PR workflow passed on 15 November 2026:
+- Run: `43688919529`
+- Job: `132735192019`
+- Runner provisioned and all steps completed.
+- Audit result: `PUBLIC LAB AUDIT: PASS`
+- 8 tracked files and 4 workflows reviewed.
+- Node test result: 1 passed, 0 failed.
+- Workflow token permissions observed in logs: Contents read, Metadata read.
+- Checkout credential persistence disabled.
+
+**Limitations:** The scanner uses explicit allowlists and pattern checks. It cannot prove the absence of all sensitive information, detect every obfuscated secret, or establish that arbitrary code is safe. It is a supplementary control, not a security certification. Human review remains required.
 
 ## Threat assessment
 
 | Threat | Control | Residual status |
 |---|---|---|
-| Public disclosure of private source | No source checkout or import | Low within current scope |
-| Fork/PR workflow secret exposure | No PR/fork trigger and no secrets | Low within current scope |
-| Third-party action compromise | No third-party actions | Low within current scope |
-| Excessive token permissions | Explicit read-only contents permission | Low within current scope |
-| Runaway compute | 3-minute job timeout | Low |
-| Artifact leakage | No artifacts produced | Low |
-| Public workflow abuse | Manual dispatch, minimal job, no credentials | Limited; repository is public |
-| Runner availability assumption | Must be tested with a real workflow run | Open |
-| Private-source exfiltration in future | No private source allowed in this repository | Prohibited / not approved |
-
-## Acceptance criteria
-
-The smoke test is accepted only when:
-1. GitHub provisions a hosted runner.
-2. The job executes all steps successfully.
-3. The recorded run has no checkout, secrets, or artifact activity.
-4. The observed result is explicitly limited to public runner availability.
-
-A successful run does not prove that private-source builds are safe or permitted.
+| Public disclosure of private source | No source checkout/import; tracked-file allowlist | Low within current scope |
+| Fork/PR secret exposure | No secrets referenced; read-only token | Low within current scope |
+| Third-party action compromise | Full-SHA pinning for the audit checkout action | Reduced; action trust still matters |
+| Excessive token permissions | Explicit read-only contents permission | Low |
+| Runaway compute | Per-job timeout | Low |
+| Artifact leakage | No artifact upload | Low |
+| Public workflow abuse | Bounded workflows, no credentials | Limited; public repo remains externally visible |
+| Hidden/obfuscated sensitive data | Pattern scanner and human review | Residual risk remains |
+| Private-source exfiltration in future | Private source prohibited | NO-GO |
 
 ## Future private-build no-go gates
 
@@ -69,8 +79,3 @@ If build code can access a source-fetch credential or untrusted dependencies can
 ## Governance
 
 The public shell is disposable infrastructure only. MAGNAN Core remains the private, authoritative repository. No source mirroring, bidirectional synchronisation, release authority, or trust delegation is permitted.
-
-
-## Clean-room Android toolchain preflight
-
-A separate manually dispatched workflow may compile only a generated disposable sample Android application. It must not checkout, fetch, mount, receive, or otherwise access MAGNAN source or credentials. It uploads no artifacts. The test may use public package repositories to install standard toolchains and dependencies; this is acceptable only because the generated sample contains no private data. A pass is evidence of runner/toolchain capability only, not MAGNAN compilation or private-source safety.
