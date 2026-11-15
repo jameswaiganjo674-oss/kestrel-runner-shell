@@ -2,6 +2,10 @@ name: MAGNAN Build Compatibility Preflight
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/magnan-build-compatibility-preflight.yml'
   push:
     branches: [main]
     paths:
@@ -48,7 +52,7 @@ jobs:
       - name: Generate disposable compatibility project
         run: |
           P="$RUNNER_TEMP/magnan-compatibility"
-          mkdir -p "$P/app/src/main/java/org/kestrel/compat" "$P/app/src/main/kotlin/org/kestrel/compat" "$P/core/src/commonMain/kotlin/org/kestrel/compat" "$P/core/src/commonTest/kotlin/org/kestrel/compat"
+          mkdir -p "$P/app/src/main/java/org/kestrel/compat" "$P/app/src/main/kotlin/org/kestrel/compat" "$P/app/src/test/java/org/kestrel/compat" "$P/core/src/commonMain/kotlin/org/kestrel/compat" "$P/core/src/commonTest/kotlin/org/kestrel/compat"
           cat > "$P/settings.gradle" <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement {
@@ -125,6 +129,7 @@ jobs:
                   targetCompatibility JavaVersion.VERSION_17
               }
               kotlinOptions { jvmTarget = '17' }
+              testOptions { unitTests.includeAndroidResources = true }
           }
           dependencies {
               implementation project(':core')
@@ -154,6 +159,24 @@ jobs:
           cat > "$P/app/src/main/kotlin/org/kestrel/compat/Bridge.kt" <<'EOF'
           package org.kestrel.compat
           class Bridge { fun ready(): Boolean = true }
+          EOF
+          cat > "$P/app/src/test/java/org/kestrel/compat/MainActivityTest.java" <<'EOF'
+          package org.kestrel.compat;
+          import static org.junit.Assert.assertTrue;
+          import android.widget.TextView;
+          import org.junit.Test;
+          import org.junit.runner.RunWith;
+          import org.robolectric.Robolectric;
+          import org.robolectric.RobolectricTestRunner;
+          import org.robolectric.annotation.Config;
+          @RunWith(RobolectricTestRunner.class)
+          @Config(sdk = 35)
+          public final class MainActivityTest {
+              @Test public void activityCreatesItsContentView() {
+                  MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
+                  assertTrue(((android.view.ViewGroup) activity.findViewById(android.R.id.content)).getChildAt(0) instanceof TextView);
+              }
+          }
           EOF
           echo "$P" > "$RUNNER_TEMP/project-path"
 

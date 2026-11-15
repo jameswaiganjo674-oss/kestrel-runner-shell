@@ -75,6 +75,9 @@ const expected = [
 for (const [label, pattern] of expected) {
   if (!pattern.test(compatibility)) failures.push(`Compatibility fixture missing expected ${label} version`);
 }
+if (!/MainActivityTest/.test(compatibility) || !/includeAndroidResources = true/.test(compatibility) || !/:app:testDebugUnitTest/.test(compatibility)) {
+  failures.push("Compatibility fixture must execute a real Robolectric Android unit test");
+}
 if (!/gradle-8\.11\.1-bin\.zip\.sha256/.test(compatibility)) {
   failures.push("Compatibility fixture must verify the official Gradle distribution checksum");
 }
