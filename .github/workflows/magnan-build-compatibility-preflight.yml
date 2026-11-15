@@ -1,0 +1,156 @@
+name: MAGNAN Build Compatibility Preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: magnan-build-compatibility-preflight
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    name: Verify declared Android and Kotlin toolchain versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Install pinned Java toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk curl unzip
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> "$GITHUB_PATH"
+
+      - name: Install Android platform
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install checksum-verified Gradle 8.11.1
+        run: |
+          cd "$RUNNER_TEMP"
+          curl --fail --location --silent --show-error -o gradle.zip https://services.gradle.org/distributions/gradle-8.11.1-bin.zip
+          curl --fail --location --silent --show-error -o gradle.zip.sha256 https://services.gradle.org/distributions/gradle-8.11.1-bin.zip.sha256
+          EXPECTED="$(tr -d '[:space:]' < gradle.zip.sha256)"
+          printf '%s  %s\n' "$EXPECTED" gradle.zip | sha256sum --check
+          unzip -q gradle.zip
+          echo "$RUNNER_TEMP/gradle-8.11.1/bin" >> "$GITHUB_PATH"
+
+      - name: Generate disposable compatibility project
+        run: |
+          P="$RUNNER_TEMP/magnan-compatibility"
+          mkdir -p "$P/app/src/main/java/org/kestrel/compat" "$P/app/src/main/kotlin/org/kestrel/compat" "$P/core/src/commonMain/kotlin/org/kestrel/compat" "$P/core/src/commonTest/kotlin/org/kestrel/compat"
+          cat > "$P/settings.gradle" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = 'MagnanBuildCompatibilityPreflight'
+          include ':app', ':core'
+          EOF
+          cat > "$P/build.gradle" <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.9.2' apply false
+              id 'org.jetbrains.kotlin.multiplatform' version '2.4.0' apply false
+              id 'org.jetbrains.kotlin.android' version '2.4.0' apply false
+          }
+          EOF
+          cat > "$P/gradle.properties" <<'EOF'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          org.gradle.parallel=false
+          EOF
+          cat > "$P/core/build.gradle" <<'EOF'
+          plugins { id 'org.jetbrains.kotlin.multiplatform' }
+          kotlin {
+              jvm()
+              iosArm64()
+              iosSimulatorArm64()
+              js(IR) { browser() }
+              sourceSets {
+                  commonMain { dependencies {} }
+                  commonTest { dependencies { implementation kotlin('test') } }
+              }
+          }
+          EOF
+          cat > "$P/core/src/commonMain/kotlin/org/kestrel/compat/Contract.kt" <<'EOF'
+          package org.kestrel.compat
+          enum class DataClassification { PUBLIC, PERSONAL_LIMITED, CONFIDENTIAL, HIGHLY_SENSITIVE, UNKNOWN }
+          data class TaskContract(val id: String, val classification: DataClassification)
+          EOF
+          cat > "$P/core/src/commonTest/kotlin/org/kestrel/compat/ContractTest.kt" <<'EOF'
+          package org.kestrel.compat
+          import kotlin.test.Test
+          import kotlin.test.assertEquals
+          class ContractTest {
+              @Test fun classificationRoundTrips() {
+                  assertEquals(DataClassification.PUBLIC, TaskContract("sample-task-id-0001", DataClassification.PUBLIC).classification)
+              }
+          }
+          EOF
+          cat > "$P/app/build.gradle" <<'EOF'
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+          android {
+              namespace 'org.kestrel.compat'
+              compileSdk 35
+              defaultConfig { applicationId 'org.kestrel.compat'; minSdk 28; targetSdk 35 }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = '17' }
+          }
+          dependencies {
+              implementation project(':core')
+              implementation 'androidx.activity:activity:1.10.1'
+              implementation 'androidx.biometric:biometric:1.1.0'
+              implementation 'com.google.ai.edge.litertlm:litertlm-android:0.18.1'
+              testImplementation 'junit:junit:4.13.2'
+              testImplementation 'org.robolectric:robolectric:4.14.1'
+          }
+          EOF
+          cat > "$P/app/src/main/AndroidManifest.xml" <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:label="Compatibility preflight">
+                  <activity android:name=".MainActivity" android:exported="false" />
+              </application>
+          </manifest>
+          EOF
+          cat > "$P/app/src/main/java/org/kestrel/compat/MainActivity.java" <<'EOF'
+          package org.kestrel.compat;
+          public final class MainActivity extends android.app.Activity {
+              @Override public void onCreate(android.os.Bundle state) {
+                  super.onCreate(state);
+                  setContentView(new android.widget.TextView(this));
+              }
+          }
+          EOF
+          cat > "$P/app/src/main/kotlin/org/kestrel/compat/Bridge.kt" <<'EOF'
+          package org.kestrel.compat
+          class Bridge { fun ready(): Boolean = true }
+          EOF
+          echo "$P" > "$RUNNER_TEMP/project-path"
+
+      - name: Run portable core tests and Android compile
+        run: |
+          cd "$(cat "$RUNNER_TEMP/project-path")"
+          gradle --no-daemon :core:jvmTest :core:compileKotlinMetadata :app:testDebugUnitTest :app:assembleDebug
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          sha256sum "$APK"
+          echo "DECLARED_MAGNAN_TOOLCHAIN_COMPATIBILITY=PASS"
+
+      - name: State isolation boundary
+        if: always()
+        run: |
+          echo "This was a generated compatibility fixture only."
+          echo "No MAGNAN source, repository checkout, credentials, or private artifacts were used."
