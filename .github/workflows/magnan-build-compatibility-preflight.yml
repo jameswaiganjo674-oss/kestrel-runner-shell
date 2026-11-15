@@ -2,6 +2,10 @@ name: MAGNAN Build Compatibility Preflight
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/magnan-build-compatibility-preflight.yml'
 
 permissions:
   contents: read
