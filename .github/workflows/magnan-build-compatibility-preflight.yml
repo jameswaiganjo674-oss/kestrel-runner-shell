@@ -174,7 +174,7 @@ jobs:
           public final class MainActivityTest {
               @Test public void activityCreatesItsContentView() {
                   MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
-                  assertTrue(activity.findViewById(android.R.id.content).getChildAt(0) instanceof TextView);
+                  assertTrue(((android.view.ViewGroup) activity.findViewById(android.R.id.content)).getChildAt(0) instanceof TextView);
               }
           }
           EOF
