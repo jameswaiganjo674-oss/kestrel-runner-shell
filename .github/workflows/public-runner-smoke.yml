@@ -1,0 +1,28 @@
+name: KESTREL Public Runner Smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kestrel-public-runner-smoke
+  cancel-in-progress: false
+
+jobs:
+  runner-smoke:
+    name: Public hosted-runner availability
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Report non-sensitive runner facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "KESTREL public runner smoke test"
+          echo "OS: $(uname -s)"
+          echo "Architecture: $(uname -m)"
+          echo "Node: $(node --version)"
+          echo "Java: $(java -version 2>&1 | head -n 1)"
+          echo "No repository checkout, secrets, or external network calls are used."
